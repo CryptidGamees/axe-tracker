@@ -53,12 +53,12 @@ select,input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--b
 <div id="auth" class="hide">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h1>🪓 LT2 Axe Tracker</h1><button class="ic" id="th0">🌓</button></div>
   <div class="card">
-    <b>Log in or create an account</b>
+    <b>Log in</b>
     <label for="un">Username</label><input id="un" autocomplete="username" autocapitalize="none" placeholder="3-20 letters/numbers">
-    <label for="pw">Password (6+ characters)</label><input id="pw" type="password" autocomplete="current-password">
+    <label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password">
     <div class="err" id="aerr"></div>
     <button class="btn b" id="login">Log in</button>
-    <button class="btn o" id="signup">Create account</button>
+    <div class="mu" style="margin-top:12px">Accounts are private. Ask the owner if you need one.</div>
   </div>
 </div>
 
@@ -75,8 +75,11 @@ select,input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--b
 <div class="mu" id="msg"></div>
 </div>
 <div class="card">
-<label for="axe">Axe</label>
-<select id="axe"><option>Many Axe</option><option>GlorbAxe</option><option>Rukiry Axe</option><option>Frost Axe</option><option>Candy Corn Axe</option><option>Refined Axe</option></select>
+<label for="axe">Axe / item</label>
+<select id="axe"></select>
+<div style="display:flex;gap:8px;margin-top:8px"><input id="newitem" maxlength="30" placeholder="New axe or item, e.g. Pig Axe" autocomplete="off"><button class="ic" id="additem" style="white-space:nowrap">Add</button></div>
+<div class="mu" id="itemmsg" style="margin-top:6px"></div>
+<a href="#" id="delitem" style="color:var(--r);font-size:13px">Remove selected item from list</a>
 <label for="pr">Price (e.g. 15000 or 15k)</label>
 <input id="pr" inputmode="text" placeholder="15k" autocomplete="off">
 <button class="btn" id="sell">Axe sold</button>
@@ -121,11 +124,12 @@ const firebaseConfig={
 
 const $=id=>document.getElementById(id);
 const configured=!String(firebaseConfig.apiKey).startsWith('PASTE');
-let S={days:{},theme:null,quota:50000},uid=null,uname='',db=null,auth=null,tmr=null;
+let S={days:{},theme:null,quota:50000,items:[]},uid=null,uname='',db=null,auth=null,tmr=null;
 const pad=n=>String(n).padStart(2,'0');
 const key=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const nice=k=>{const[a,b,c]=k.split('-');return c+'/'+b+'/'+a};
 const f=n=>n.toLocaleString('en-US');
+const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const tm=t=>{const d=new Date(t);return pad(d.getHours())+':'+pad(d.getMinutes())};
 const sum=d=>d.sales.reduce((a,s)=>a+s.price,0);
 const qOf=d=>d.q||S.quota||50000;
@@ -162,11 +166,10 @@ function creds(){const u=$('un').value.trim(),p=$('pw').value;
   if(!/^[a-z0-9_.-]{3,20}$/i.test(u)){$('aerr').textContent='Username: 3-20 letters, numbers, _ . -';return null}
   if(!p){$('aerr').textContent='Enter a password.';return null}
   $('aerr').textContent='';return{u,p}}
-if(!configured){$('auth').classList.remove('hide');$('aerr').textContent='Firebase is not set up yet: paste your firebaseConfig into the file.';$('login').disabled=$('signup').disabled=true}
+if(!configured){$('auth').classList.remove('hide');$('aerr').textContent='Firebase is not set up yet: paste your firebaseConfig into the file.';$('login').disabled=true}
 else{
   firebase.initializeApp(firebaseConfig);auth=firebase.auth();db=firebase.firestore();
   $('login').onclick=()=>{const c=creds();if(c)auth.signInWithEmailAndPassword(toEmail(c.u),c.p).catch(e=>$('aerr').textContent=msg(e))};
-  $('signup').onclick=()=>{const c=creds();if(c)auth.createUserWithEmailAndPassword(toEmail(c.u),c.p).catch(e=>$('aerr').textContent=msg(e))};
   $('pw').onkeydown=e=>{if(e.key==='Enter')$('login').click()};
   $('out').onclick=()=>auth.signOut();
   auth.onAuthStateChanged(async u=>{
@@ -178,9 +181,9 @@ else{
     try{const sn=await db.collection('users').doc(uid).get();if(sn.exists)remote={u:sn.data().u||0,S:JSON.parse(sn.data().json)}}catch(e){ok=false}
     const best=(local&&(!remote||local.u>remote.u))?local:remote;
     const th=S.theme;
-    S={days:{},theme:th,quota:50000};
-    if(best&&best.S){S=best.S;S.days=S.days||{};S.quota=S.quota||50000;if(!S.theme)S.theme=th}
-    applyTheme();cur=key(new Date());auto=true;$('dt').value=cur;sel=null;
+    S={days:{},theme:th,quota:50000,items:[]};
+    if(best&&best.S){S=best.S;S.days=S.days||{};S.quota=S.quota||50000;S.items=S.items||[];if(!S.theme)S.theme=th}
+    applyTheme();renderItems('');cur=key(new Date());auto=true;$('dt').value=cur;sel=null;
     renderSell();renderTrack();
     if(!ok)setSync('⚠️ offline');else if(local&&(!remote||local.u>remote.u))save();else setSync('☁️ synced');
   });
@@ -199,7 +202,25 @@ setInterval(syncDate,15000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncDate()});
 window.addEventListener('focus',syncDate);
 
+const MAXITEMS=50;
+function renderItems(keep){
+  const it=S.items||[],sl=$('axe');
+  const v=keep!==undefined?keep:sl.value;
+  sl.innerHTML=it.length?it.map(n=>'<option>'+esc(n)+'</option>').join(''):'<option value="">Add an axe or item below</option>';
+  if(it.includes(v))sl.value=v;
+}
+$('additem').onclick=()=>{
+  const n=$('newitem').value.trim().replace(/\s+/g,' '),m=$('itemmsg');
+  if(!n){m.textContent='Type a name first.';return}
+  if((S.items||[]).some(x=>x.toLowerCase()===n.toLowerCase())){m.textContent='That item is already in your list.';return}
+  if((S.items||[]).length>=MAXITEMS){m.textContent='List is full ('+MAXITEMS+' items). Remove one first.';return}
+  S.items=(S.items||[]).concat(n);$('newitem').value='';m.textContent='Added "'+n+'".';
+  renderItems(n);save();
+};
+$('newitem').onkeydown=e=>{if(e.key==='Enter')$('additem').click()};
+$('delitem').onclick=e=>{e.preventDefault();const v=$('axe').value;if(!v)return;S.items=S.items.filter(x=>x!==v);$('itemmsg').textContent='Removed "'+v+'" (past sales keep the name).';renderItems('');save()};
 $('sell').onclick=()=>{
+  if(!$('axe').value){$('itemmsg').textContent='Add an axe or item first.';$('newitem').focus();return}
   const p=parse($('pr').value);
   if(!(p>0)){$('pr').focus();$('pr').style.borderColor='var(--r)';return}
   $('pr').style.borderColor='';
@@ -232,7 +253,7 @@ function renderSell(){
   $('msg').textContent=d.gaveUp?'Gave up at '+tm(d.gaveUp)+' with '+f(t)+' sold.':t>=Q?'🎉 Quota hit! Extra: '+f(t-Q):f(Q-t)+' left to hit quota';
   $('sell').disabled=!!d.gaveUp;
   $('give').textContent=d.gaveUp?'Reopen this day':'Give up for the day';
-  $('log').innerHTML=d.sales.length?d.sales.map((s,i)=>'<div class="row"><span>'+tm(s.t)+' · '+s.axe+'</span><span><b>'+f(s.price)+'</b> <a href="#" onclick="undo('+i+');return false" style="color:var(--r)">✕</a></span></div>').reverse().join(''):'<div class="mu" style="margin-top:6px">Nothing sold yet.</div>';
+  $('log').innerHTML=d.sales.length?d.sales.map((s,i)=>'<div class="row"><span>'+tm(s.t)+' · '+esc(s.axe)+'</span><span><b>'+f(s.price)+'</b> <a href="#" onclick="undo('+i+');return false" style="color:var(--r)">✕</a></span></div>').reverse().join(''):'<div class="mu" style="margin-top:6px">Nothing sold yet.</div>';
 }
 
 function status(k){const d=get(k),t=sum(d);return t>=qOf(d)?'g':t>0?'y':'r'}
@@ -260,7 +281,7 @@ function renderTrack(){
   if(h)html+='<div class="row"><span>Quota hit at</span><b>'+tm(h.t)+'</b></div><div class="row"><span>Time taken to hit quota</span><b>'+dur(h.took)+'</b></div>';
   else if(d.sales.length)html+='<div class="row"><span>Short by</span><b>'+f(Q-t)+'</b></div>';
   if(d.gaveUp)html+='<div class="row"><span>Gave up at</span><b>'+tm(d.gaveUp)+'</b></div>';
-  html+=d.sales.map(s=>'<div class="row"><span>'+tm(s.t)+' · '+s.axe+'</span><b>'+f(s.price)+'</b></div>').join('');
+  html+=d.sales.map(s=>'<div class="row"><span>'+tm(s.t)+' · '+esc(s.axe)+'</span><b>'+f(s.price)+'</b></div>').join('');
   el.innerHTML=html;
 }
 </script>
