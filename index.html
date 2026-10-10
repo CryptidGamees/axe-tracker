@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#2f94d1">
-<title>LT2 Axe Tracker</title>
+<title>Roblox Item Tracker</title>
 <style>
 :root{--bg:#f4f1ea;--card:#fff;--tx:#241f18;--mu:#7a7060;--bd:#ddd5c4;--ac:#2f94d1;--onac:#fff;--g:#2e9e4f;--y:#e8b923;--r:#d64545;--e:#cfc8b8;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -43,6 +43,8 @@ select,input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--b
 .lg{display:flex;gap:12px;flex-wrap:wrap;font-size:13px;margin:10px 0}
 .lg b{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-1px}
 .hide{display:none}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:9}
+.modal.hide{display:none}
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 #auth{max-width:420px;margin:8vh auto 0}
 </style>
@@ -51,7 +53,7 @@ select,input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--b
 <div class="w">
 
 <div id="auth" class="hide">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h1>🪓 LT2 Axe Tracker</h1><button class="ic" id="th0">🌓</button></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h1>🎮 Roblox Item Tracker</h1><button class="ic" id="th0">🌓</button></div>
   <div class="card">
     <b>Log in</b>
     <label for="un">Username</label><input id="un" autocomplete="username" autocapitalize="none" placeholder="3-20 letters/numbers">
@@ -62,9 +64,17 @@ select,input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--b
   </div>
 </div>
 
+<div id="modal" class="modal hide"><div class="card" style="width:100%;max-width:380px;margin:0">
+<b>Add a game</b>
+<label for="gname">Game name</label><input id="gname" maxlength="40" placeholder="e.g. Blox Fruits" autocomplete="off">
+<label for="gq">Daily quota (e.g. 50k)</label><input id="gq" placeholder="50k" autocomplete="off">
+<div class="err" id="gerr"></div>
+<button class="btn b" id="gok">Add game</button><button class="btn o" id="gcancel">Cancel</button>
+</div></div>
 <div id="app" class="hide">
-<header><h1>🪓 LT2 Axe Tracker</h1><div><button class="ic" id="th">🌓</button> <button class="ic" id="out">Log out</button></div></header>
+<header><h1>🎮 Roblox Item Tracker</h1><div><button class="ic" id="th">🌓</button> <button class="ic" id="out">Log out</button></div></header>
 <div class="mu" style="margin:-6px 0 10px"><span id="who"></span> · <span id="sync"></span></div>
+<div class="card" style="display:flex;gap:8px;align-items:center;padding:10px"><select id="game" aria-label="Game" style="flex:1"></select><button class="ic" id="addgame" style="white-space:nowrap">+ Add more</button></div>
 <div class="tabs"><button id="t1" class="on">Sell</button><button id="t2">Track</button></div>
 
 <div id="p1">
@@ -75,14 +85,14 @@ select,input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--b
 <div class="mu" id="msg"></div>
 </div>
 <div class="card">
-<label for="axe">Axe / item</label>
+<label for="axe">Item</label>
 <select id="axe"></select>
-<div style="display:flex;gap:8px;margin-top:8px"><input id="newitem" maxlength="30" placeholder="New axe or item, e.g. Pig Axe" autocomplete="off"><button class="ic" id="additem" style="white-space:nowrap">Add</button></div>
+<div style="display:flex;gap:8px;margin-top:8px"><input id="newitem" maxlength="30" placeholder="New item, e.g. Pig Axe" autocomplete="off"><button class="ic" id="additem" style="white-space:nowrap">Add</button></div>
 <div class="mu" id="itemmsg" style="margin-top:6px"></div>
 <a href="#" id="delitem" style="color:var(--r);font-size:13px">Remove selected item from list</a>
 <label for="pr">Price (e.g. 15000 or 15k)</label>
 <input id="pr" inputmode="text" placeholder="15k" autocomplete="off">
-<button class="btn" id="sell">Axe sold</button>
+<button class="btn" id="sell">Item sold</button>
 <button class="btn s" id="give">Give up for the day</button>
 </div>
 <div class="card"><b>Sales this day</b><div id="log"></div></div>
@@ -96,7 +106,7 @@ select,input{width:100%;padding:12px;border-radius:10px;border:1px solid var(--b
 <div id="p2" class="hide">
 <div class="card stats">
 <div><div class="mu">Lifetime sold</div><div class="big" id="life">0</div></div>
-<div><div class="mu">Axes sold</div><div class="big" id="cnt">0</div></div>
+<div><div class="mu">Items sold</div><div class="big" id="cnt">0</div></div>
 <div><div class="mu">Quotas hit</div><div class="big" id="hit">0</div></div>
 <div><div class="mu">Days tracked</div><div class="big" id="dd">0</div></div>
 </div>
@@ -124,7 +134,7 @@ const firebaseConfig={
 
 const $=id=>document.getElementById(id);
 const configured=!String(firebaseConfig.apiKey).startsWith('PASTE');
-let S={days:{},theme:null,quota:50000,items:[]},uid=null,uname='',db=null,auth=null,tmr=null;
+let G=null,S={theme:null,games:{},cur:null},uid=null,uname='',db=null,auth=null,tmr=null;
 const pad=n=>String(n).padStart(2,'0');
 const key=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const nice=k=>{const[a,b,c]=k.split('-');return c+'/'+b+'/'+a};
@@ -132,8 +142,8 @@ const f=n=>n.toLocaleString('en-US');
 const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const tm=t=>{const d=new Date(t);return pad(d.getHours())+':'+pad(d.getMinutes())};
 const sum=d=>d.sales.reduce((a,s)=>a+s.price,0);
-const qOf=d=>d.q||S.quota||50000;
-const get=k=>S.days[k]||{sales:[],gaveUp:null};
+const qOf=d=>d.q||G.quota||50000;
+const get=k=>G.days[k]||{sales:[],gaveUp:null};
 function dur(ms){const m=Math.round(ms/60000);if(m<1)return'under 1 min';const h=Math.floor(m/60);return h?h+'h '+(m%60)+'m':m+' min'}
 function hitInfo(d){let c=0;const q=qOf(d);for(const s of d.sales){c+=s.price;if(c>=q)return{t:s.t,took:s.t-d.sales[0].t}}return null}
 function parse(v){const m=v.trim().replace(/,/g,'').match(/^(\d*\.?\d+)\s*([km])?$/i);if(!m)return NaN;let n=parseFloat(m[1]);const u=(m[2]||'').toLowerCase();if(u==='k')n*=1e3;if(u==='m')n*=1e6;return Math.round(n)}
@@ -181,9 +191,10 @@ else{
     try{const sn=await db.collection('users').doc(uid).get();if(sn.exists)remote={u:sn.data().u||0,S:JSON.parse(sn.data().json)}}catch(e){ok=false}
     const best=(local&&(!remote||local.u>remote.u))?local:remote;
     const th=S.theme;
-    S={days:{},theme:th,quota:50000,items:[]};
-    if(best&&best.S){S=best.S;S.days=S.days||{};S.quota=S.quota||50000;S.items=S.items||[];if(!S.theme)S.theme=th}
-    applyTheme();renderItems('');cur=key(new Date());auto=true;$('dt').value=cur;sel=null;
+    S={theme:th,games:{lt2:{name:'Lumber Tycoon 2',quota:50000,items:[],days:{}}},cur:'lt2'};
+    if(best&&best.S){S=best.S;if(!S.theme)S.theme=th}
+    migrate();
+    applyTheme();renderGames();renderItems('');cur=key(new Date());auto=true;$('dt').value=cur;sel=null;
     renderSell();renderTrack();
     if(!ok)setSync('⚠️ offline');else if(local&&(!remote||local.u>remote.u))save();else setSync('☁️ synced');
   });
@@ -202,29 +213,59 @@ setInterval(syncDate,15000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncDate()});
 window.addEventListener('focus',syncDate);
 
+function migrate(){
+  if(!S.games){ /* old single-game save: move into "Lumber Tycoon 2", keep an untouched backup copy */
+    S.backupV1={days:S.days||{},quota:S.quota||50000,items:S.items||[]};
+    S.games={lt2:{name:'Lumber Tycoon 2',quota:S.backupV1.quota,items:JSON.parse(JSON.stringify(S.backupV1.items)),days:JSON.parse(JSON.stringify(S.backupV1.days))}};
+    S.cur='lt2';delete S.days;delete S.quota;delete S.items;
+  }
+  if(!S.games[S.cur])S.cur=Object.keys(S.games)[0];
+  G=S.games[S.cur];G.days=G.days||{};G.quota=G.quota||50000;G.items=G.items||[];
+}
+function renderGames(){
+  $('game').innerHTML=Object.keys(S.games).map(id=>'<option value="'+id+'">'+esc(S.games[id].name)+'</option>').join('');
+  $('game').value=S.cur;
+}
+function selectGame(id){
+  S.cur=id;G=S.games[id];sel=null;$('itemmsg').textContent='';
+  renderGames();renderItems('');renderSell();renderTrack();save();
+}
+$('game').onchange=e=>selectGame(e.target.value);
+$('addgame').onclick=()=>{$('gname').value='';$('gq').value='50k';$('gerr').textContent='';$('modal').classList.remove('hide');$('gname').focus()};
+$('gcancel').onclick=()=>$('modal').classList.add('hide');
+$('gok').onclick=()=>{
+  const n=$('gname').value.trim().replace(/\s+/g,' '),q=parse($('gq').value),e=$('gerr');
+  if(!n){e.textContent='Type the game name.';return}
+  if(!(q>0)){e.textContent='Quota must be a number like 50k.';return}
+  if(Object.values(S.games).some(g=>g.name.toLowerCase()===n.toLowerCase())){e.textContent='You already have that game.';return}
+  if(Object.keys(S.games).length>=20){e.textContent='Limit is 20 games.';return}
+  const id='g'+Date.now().toString(36);
+  S.games[id]={name:n,quota:q,items:[],days:{}};
+  $('modal').classList.add('hide');selectGame(id);
+};
 const MAXITEMS=50;
 function renderItems(keep){
-  const it=S.items||[],sl=$('axe');
+  const it=G.items||[],sl=$('axe');
   const v=keep!==undefined?keep:sl.value;
-  sl.innerHTML=it.length?it.map(n=>'<option>'+esc(n)+'</option>').join(''):'<option value="">Add an axe or item below</option>';
+  sl.innerHTML=it.length?it.map(n=>'<option>'+esc(n)+'</option>').join(''):'<option value="">Add an item below</option>';
   if(it.includes(v))sl.value=v;
 }
 $('additem').onclick=()=>{
   const n=$('newitem').value.trim().replace(/\s+/g,' '),m=$('itemmsg');
   if(!n){m.textContent='Type a name first.';return}
-  if((S.items||[]).some(x=>x.toLowerCase()===n.toLowerCase())){m.textContent='That item is already in your list.';return}
-  if((S.items||[]).length>=MAXITEMS){m.textContent='List is full ('+MAXITEMS+' items). Remove one first.';return}
-  S.items=(S.items||[]).concat(n);$('newitem').value='';m.textContent='Added "'+n+'".';
+  if((G.items||[]).some(x=>x.toLowerCase()===n.toLowerCase())){m.textContent='That item is already in your list.';return}
+  if((G.items||[]).length>=MAXITEMS){m.textContent='List is full ('+MAXITEMS+' items). Remove one first.';return}
+  G.items=(G.items||[]).concat(n);$('newitem').value='';m.textContent='Added "'+n+'".';
   renderItems(n);save();
 };
 $('newitem').onkeydown=e=>{if(e.key==='Enter')$('additem').click()};
-$('delitem').onclick=e=>{e.preventDefault();const v=$('axe').value;if(!v)return;S.items=S.items.filter(x=>x!==v);$('itemmsg').textContent='Removed "'+v+'" (past sales keep the name).';renderItems('');save()};
+$('delitem').onclick=e=>{e.preventDefault();const v=$('axe').value;if(!v)return;G.items=G.items.filter(x=>x!==v);$('itemmsg').textContent='Removed "'+v+'" (past sales keep the name).';renderItems('');save()};
 $('sell').onclick=()=>{
-  if(!$('axe').value){$('itemmsg').textContent='Add an axe or item first.';$('newitem').focus();return}
+  if(!$('axe').value){$('itemmsg').textContent='Add an item first.';$('newitem').focus();return}
   const p=parse($('pr').value);
   if(!(p>0)){$('pr').focus();$('pr').style.borderColor='var(--r)';return}
   $('pr').style.borderColor='';
-  const d=S.days[cur]||(S.days[cur]={sales:[],gaveUp:null,q:S.quota});
+  const d=G.days[cur]||(G.days[cur]={sales:[],gaveUp:null,q:G.quota});
   let t=Date.now();
   if(cur!==key(new Date()))t=new Date(cur+'T12:00:00').getTime();
   d.sales.push({t,axe:$('axe').value,price:p});
@@ -232,15 +273,15 @@ $('sell').onclick=()=>{
 };
 $('give').onclick=()=>{
   const d=get(cur);
-  if(d.gaveUp){d.gaveUp=null;S.days[cur]=d;save();renderSell();return}
+  if(d.gaveUp){d.gaveUp=null;G.days[cur]=d;save();renderSell();return}
   if(!armed){armed=1;$('give').textContent='Tap again to confirm give up';setTimeout(()=>{armed=0;renderSell()},4000);return}
-  armed=0;if(!d.q)d.q=S.quota;d.gaveUp=Date.now();S.days[cur]=d;save();renderSell();
+  armed=0;if(!d.q)d.q=G.quota;d.gaveUp=Date.now();G.days[cur]=d;save();renderSell();
 };
 $('qsave').onclick=()=>{
   const v=parse($('qin').value);
   if(!(v>0)){$('qin').style.borderColor='var(--r)';return}
-  $('qin').style.borderColor='';S.quota=v;
-  const d=S.days[cur];if(d)d.q=v;
+  $('qin').style.borderColor='';G.quota=v;
+  const d=G.days[cur];if(d)d.q=v;
   save();renderSell();renderTrack();
 };
 window.undo=i=>{const d=get(cur);d.sales.splice(i,1);save();renderSell()};
@@ -248,7 +289,7 @@ window.undo=i=>{const d=get(cur);d.sales.splice(i,1);save();renderSell()};
 function renderSell(){
   const d=get(cur),t=sum(d),Q=qOf(d),pct=Math.min(100,t/Q*100);
   $('tot').textContent=f(t);$('qv').textContent=f(Q);
-  if(document.activeElement!==$('qin'))$('qin').value=S.quota;
+  if(document.activeElement!==$('qin'))$('qin').value=G.quota;
   $('pb').style.width=pct+'%';$('pb').className=t>=Q?'ok':'';
   $('msg').textContent=d.gaveUp?'Gave up at '+tm(d.gaveUp)+' with '+f(t)+' sold.':t>=Q?'🎉 Quota hit! Extra: '+f(t-Q):f(Q-t)+' left to hit quota';
   $('sell').disabled=!!d.gaveUp;
@@ -258,7 +299,7 @@ function renderSell(){
 
 function status(k){const d=get(k),t=sum(d);return t>=qOf(d)?'g':t>0?'y':'r'}
 function renderTrack(){
-  const keys=Object.keys(S.days).filter(k=>S.days[k].sales.length||S.days[k].gaveUp).sort();
+  const keys=Object.keys(G.days).filter(k=>G.days[k].sales.length||G.days[k].gaveUp).sort();
   const today=key(new Date());
   let start=keys.length?keys[0]:today;if(start>today)start=today;
   const out=[];const end=new Date(today+'T12:00:00');
@@ -274,9 +315,9 @@ function renderTrack(){
   if(!sel){el.classList.add('hide');return}
   const d=get(sel),t=sum(d),h=hitInfo(d),Q=qOf(d);
   el.classList.remove('hide');
-  let html='<b>'+nice(sel)+'</b> <span class="mu">('+(status(sel)==='g'?'Quota hit':status(sel)==='y'?'Quota not hit':'No axes sold')+')</span>';
+  let html='<b>'+nice(sel)+'</b> <span class="mu">('+(status(sel)==='g'?'Quota hit':status(sel)==='y'?'Quota not hit':'No items sold')+')</span>';
   html+='<div class="row"><span>Total sold</span><b>'+f(t)+' / '+f(Q)+'</b></div>';
-  html+='<div class="row"><span>Axes sold</span><b>'+d.sales.length+'</b></div>';
+  html+='<div class="row"><span>Items sold</span><b>'+d.sales.length+'</b></div>';
   if(d.sales.length)html+='<div class="row"><span>First / last sale</span><b>'+tm(d.sales[0].t)+' / '+tm(d.sales[d.sales.length-1].t)+'</b></div>';
   if(h)html+='<div class="row"><span>Quota hit at</span><b>'+tm(h.t)+'</b></div><div class="row"><span>Time taken to hit quota</span><b>'+dur(h.took)+'</b></div>';
   else if(d.sales.length)html+='<div class="row"><span>Short by</span><b>'+f(Q-t)+'</b></div>';
